@@ -1,9 +1,14 @@
 # TODO
 # - use system node deps
+#
+# Conditional build:
+%bcond_with	npm		# build with npm installing vendors on package install
+%bcond_without	bundled		# build npm vendors bundled
+
 Summary:	A package manager for the web
 Name:		bower
 Version:	1.3.9
-Release:	0.4
+Release:	0.7
 License:	MIT
 Group:		Development/Libraries
 Source0:	http://registry.npmjs.org/bower/-/%{name}-%{version}.tgz
@@ -11,8 +16,14 @@ Source0:	http://registry.npmjs.org/bower/-/%{name}-%{version}.tgz
 URL:		http://bower.io/
 BuildRequires:	rpmbuild(macros) >= 1.634
 BuildRequires:	sed >= 4.0
+%if %{with bundled}
+BuildRequires:	npm
+%endif
+%if %{with npm}
+Requires:	npm
+%endif
 Requires:	nodejs >= 0.10.0
-%if 0
+%if %{without npm} && %{without bundled}
 Requires:	nodejs-abbrev >= 1.0.4
 Requires:	nodejs-archy >= 0.0.2
 Requires:	nodejs-bower-config >= 0.5.2
@@ -76,22 +87,36 @@ mv package/* .
 %{__sed} -i -e '1s,^#!.*node,#!/usr/bin/node,' bin/*
 chmod a+rx bin/*
 
+%if %{with bundled}
+%build
+npm install .
+chmod -R a+rX node_modules
+%endif
+
 %install
 rm -rf $RPM_BUILD_ROOT
 install -d $RPM_BUILD_ROOT{%{_bindir},%{nodejs_libdir}/%{name}}
 cp -pr lib bin templates package.json $RPM_BUILD_ROOT%{nodejs_libdir}/%{name}
 ln -s %{nodejs_libdir}/%{name}/bin/%{name} $RPM_BUILD_ROOT%{_bindir}
 
+%if %{with bundled}
+cp -a node_modules $RPM_BUILD_ROOT%{nodejs_libdir}/%{name}
+%endif
+
 %clean
 rm -rf $RPM_BUILD_ROOT
 
-%if 1
+%if %{with npm}
 # hack to setup node modules until system deps are available
 %post
-set -x
 test -d %{nodejs_libdir}/%{name}/node_modules && exit 0
 cd %{nodejs_libdir}/%{name}
 npm install
+
+%postun
+if [ "$1" = 0 ]; then
+	rm -r %{nodejs_libdir}/%{name}/node_modules
+fi
 %endif
 
 %files
@@ -104,3 +129,8 @@ npm install
 %{nodejs_libdir}/%{name}/lib
 %dir %{nodejs_libdir}/%{name}/bin
 %attr(755,root,root) %{nodejs_libdir}/%{name}/bin/*
+
+%if %{with bundled}
+%defattr(-,root,root,-)
+%{nodejs_libdir}/%{name}/node_modules
+%endif
